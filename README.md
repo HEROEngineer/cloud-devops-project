@@ -1,12 +1,12 @@
+# Udacity Project nr 2 || Cloud DevOps Engineer
+
+#### Patryk Pawlak thepatrvq@gmail.com
+
+For more info go to https://www.udacity.com/course/cloud-dev-ops-nanodegree--nd9991
+
+## Deploy a High-Availability Web App using CloudFormation
+
 # PROJECT SPECIFICATION:
-
-# Deploy a High-Availability Web App using CloudFormation
-
-### Udacity Project nr 2 || Cloud DevOps Engineer
-
-## Patryk Pawlak thepatrvq@gmail.com
-
-For more info go to (https://www.udacity.com/course/cloud-dev-ops-nanodegree--nd9991).
 
 ## Project Introduction
 
@@ -71,8 +71,6 @@ If you want to go the extra mile, set up a bastion host to allow you to SSH into
 
 Last thing: Remember to delete your CloudFormation stack when you're done to avoid recurring charges!
 
-## Website Link
-
 ## Architecture Diagram
 
-!(diagram/Udagram.png)
+![Diagram](diagram/Udagram.png)
