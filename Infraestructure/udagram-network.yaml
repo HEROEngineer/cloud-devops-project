@@ -1,4 +1,4 @@
-Descriptin: >
+Description: >
   Patryk Pawlak | Udacity 2020
   AWS-CloudFormation script to create a network infrastructure.
 
@@ -57,7 +57,7 @@ Resources:
         - Key: Name
           Value: !Ref EnvironmentName
 
-  GatewayAttachment:
+  InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref VPC
@@ -117,13 +117,13 @@ Resources:
 
   ElasticIP1:
     Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachment
+    DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
 
   ElasticIP2:
     Type: AWS::EC2::EIP
-    DependsOn: GatewayAttachment
+    DependsOn: InternetGatewayAttachment
     Properties:
       Domain: vpc
 
