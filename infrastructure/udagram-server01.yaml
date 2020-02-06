@@ -123,10 +123,32 @@ Resources:
     DependsOn:
       - BastionSecurityGroup
       - BastionIamInstanceProfile
-    Properties:
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash
+
+############################### Outputs #################################
+Outputs:
+  Website:
+    Description: The Public DNS for the EC2 Instance
+    Value: !Join ["", ["http://", !GetAtt [WebAppLB, DNSName]]]
+
+  WebAppCPUHighAlarm:
+    Description: "CloudWatch to send alarms when EC2 CPU is High"
+    Value: !Ref "WebAppCPUHighAlarm"
+
+  WebAppCPULowAlarm:
+    Description: "CloudWatch to send alarms when EC2 CPU is Low"
+    Value: !Ref "WebAppCPULowAlarm"
+
+  WebAppASG:
+    Description: "Group ID of Auto Scaling Group Reference ID"
+    Value: !Ref "WebAppASG"
+
+  WebAppScaleUp:
+    Description: "Policy ID of Auto Scaling Up"
+    Value: !Ref "WebAppScaleUp"
+
+  WebAppScaleDown:
+    Description: "Policy ID of Auto Scaling Down"
+    Value: !Ref "WebAppScaleDown"
           apt-get update -y
           apt-get install unzip awscli -y
           cd /home/ubuntu
@@ -167,8 +189,8 @@ Outputs:
     Export:
       Name: !Sub ${EnvironmentName}-BASTION1-CIDR
 
-  CIDRBastion1:
-    Description: The CIDR to the Bastion Host 1
+  CIDRBastion2:
+    Description: The CIDR to the Bastion Host 2
     Value: !Join ["", [!GetAtt Bastion2.PrivateIp, !Sub "/32"]]
     Export:
       Name: !Sub ${EnvironmentName}-BASTION2-CIDR

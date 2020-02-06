@@ -1,0 +1,9 @@
+[{
+        "ParameterKey": "EnvironmentName",
+        "ParameterValue": "Udagram"
+    },
+    {
+        "ParameterKey": "WebAppACL",
+        "ParameterValue": "UdagramACL"
+    }
+]

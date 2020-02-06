@@ -71,6 +71,39 @@ If you want to go the extra mile, set up a bastion host to allow you to SSH into
 
 Last thing: Remember to delete your CloudFormation stack when you're done to avoid recurring charges!
 
-## Architecture Diagram
+# MY SOLUTION:
+
+### Architecture Diagram
 
 ![Diagram](diagram/Udagram.png)
+
+The diagram is incomplet due to free-tier limitations of the software, I could not add more items into it.
+It shows only the most important concepts.
+
+### Scripts
+
+The project require to create a networking infrastructure, virtual machines, and file storage system in order to upload and test a web application. I created 5 Cloud Formation scripts and supporting bash scripts in order to simply create whole infrastructure whenever its needed, and after the job is done, to easily discard it.
+
+#### Usage
+
+It is tested for Ubuntu18.
+
+> Ensure that you have the least [AWS CLI](https://aws.amazon.com/cli/) installed.
+
+```
+    aws --version
+```
+
+> Usage:
+
+```
+./create.sh (stackName) (script.yml) (parameters.json)
+```
+
+> Example:
+
+```
+./create.sh Udagram infrastructure/udagram-network.yaml infrastructure/parameters/udagram-network.json
+```
+
+It creates a CloudFormation stack named Udagram, with infrastructure described in .yaml and .json files, AWS-region is specified in the bash script.

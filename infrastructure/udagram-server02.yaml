@@ -33,10 +33,6 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-        # - IpProtocol: tcp
-        #   FromPort: 8080
-        #   ToPort: 8080
-        #   CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName} LBSecGroup
@@ -54,10 +50,6 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-        # - IpProtocol: tcp
-        #   FromPort: 8080
-        #   ToPort: 8080
-        #   CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
@@ -70,3 +62,254 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${EnvironmentName} WebServerSecGroup
+
+  WebAppSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to ec2 and SHH access
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VPCID'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp:
+            Fn::ImportValue: !Sub ${EnvironmentName}-BASTION1-CIDR
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp:
+            Fn::ImportValue: !Sub ${EnvironmentName}-BASTION2-CIDR
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-WASG
+
+  WebAppLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install unzip awscli -y
+          apt-get install apache2 -y
+          systemctl start apache2.service
+          sudo rm /var/www/html/index.html
+          sudo aws s3 cp s3://udagram-app-patryk/udagram.zip /var/www/html
+          sudo unzip /var/www/html/udagram.zip -d /var/www/html
+          systemctl restart apache2.service
+      IamInstanceProfile:
+        Fn::ImportValue: !Sub '${EnvironmentName}-IAM-NAME'
+      SecurityGroups:
+        - Ref: 'WebAppSG'
+      BlockDeviceMappings:
+        - DeviceName: '/dev/sdk'
+          Ebs:
+            VolumeSize: '10'
+            DeleteOnTermination: true
+            VolumeType: 'gp2'
+      ImageId: !FindInMap [WebAppRegion, !Ref 'AWS::Region', HVM64]
+      InstanceType: t3.small
+
+  WebAppASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: 4
+      MaxSize: 4
+      DesiredCapacity: 4
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PRI1-SN'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PRI2-SN'
+      LaunchConfigurationName: !Ref WebAppLaunchConfig
+      TargetGroupARNs:
+        - Ref: WebAppTG
+
+  WebAppLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: udagram
+      Subnets:
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PUB1-SN'
+        - Fn::ImportValue: !Sub '${EnvironmentName}-PUB2-SN'
+      SecurityGroups:
+        - Ref: LBSecGroup
+
+  WebAppListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref WebAppTG
+      LoadBalancerArn: !Ref WebAppLB
+      Port: 80
+      Protocol: HTTP
+
+  WebAppLR:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WebAppTG
+      Conditions:
+        - Field: path-pattern
+          Values: [/]
+      ListenerArn: !Ref WebAppListener
+      Priority: 1
+
+  WebAppTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: '${EnvironmentName}-VPCID'
+
+  #ScalingUp
+  WebAppScaleUp:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebAppASG
+      Cooldown: 300
+      ScalingAdjustment: 1
+
+  #ScalingDown
+  WebAppScaleDown:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebAppASG
+      Cooldown: 300
+      ScalingAdjustment: -1
+
+  #CloudWatch alerts
+  WebAppCPUHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: 'WebAppCPUUsageHigh'
+      AlarmDescription: 'CPU usage is greater than 80% for 5 minutes'
+      MetricName: 'CPUUtilization'
+      Namespace: 'AWS/EC2'
+      Statistic: 'Average'
+      Period: '300'
+      EvaluationPeriods: '1'
+      Threshold: '80'
+      ComparisonOperator: 'GreaterThanThreshold'
+      AlarmActions:
+        - Ref: 'WebAppScaleUp'
+      Dimensions:
+        - Name: 'AutoScalingGroupName'
+          Value:
+            Ref: 'WebAppASG'
+
+  #CloudWatch alerts
+  WebAppCPULowAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmName: 'WebAppCPUUsageLow'
+      AlarmDescription: 'CPU usage is less than 25% for 5 minutes'
+      MetricName: 'CPUUtilization'
+      Namespace: 'AWS/EC2'
+      Statistic: 'Average'
+      Period: '300'
+      EvaluationPeriods: '1'
+      Threshold: '25'
+      ComparisonOperator: 'GreaterThanThreshold'
+      AlarmActions:
+        - Ref: 'WebAppScaleDown'
+      Dimensions:
+        - Name: 'AutoScalingGroupName'
+          Value:
+            Ref: 'WebAppASG'
+
+  #CloudFront and WAF Protection
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt [WebAppLB, DNSName]
+            Id: !GetAtt [WebAppLB, DNSName]
+            CustomOriginConfig:
+              HTTPPort: 80
+              OriginProtocolPolicy: http-only
+        Enabled: 'true'
+        CustomErrorResponses:
+          - ErrorCachingMinTTL: 0
+            ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: '/error.html'
+          - ErrorCachingMinTTL: 0
+            ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: '/error.html'
+        DefaultRootObject: index.html
+        Logging:
+          IncludeCookies: 'false'
+          Bucket:
+            Fn::Join:
+              - ''
+              - - Fn::ImportValue: !Sub ${EnvironmentName}-S3-LOGS
+        Restrictions:
+          GeoRestriction:
+            RestrictionType: none
+            Locations: []
+        DefaultCacheBehavior:
+          AllowedMethods: [HEAD, GET]
+          MinTTL: '0'
+          MaxTTL: '0'
+          DefaultTTL: '0'
+          TargetOriginId: !GetAtt [WebAppLB, DNSName]
+          SmoothStreaming: 'false'
+          ForwardedValues:
+            QueryString: 'true'
+          ViewerProtocolPolicy: allow-all
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: 'true'
+        WebACLId:
+          Fn::Join:
+            - ''
+            - - Fn::ImportValue: !Sub ${EnvironmentName}-WEBACL
+
+############################### Outputs #################################
+Outputs:
+  Website:
+    Description: The Public DNS for the EC2 Instance
+    Value: !Join ['', ['http://', !GetAtt [WebAppLB, DNSName]]]
+
+  WebAppCPUHighAlarm:
+    Description: 'CloudWatch to send alarms when EC2 CPU is High'
+    Value: !Ref 'WebAppCPUHighAlarm'
+
+  WebAppCPULowAlarm:
+    Description: 'CloudWatch to send alarms when EC2 CPU is Low'
+    Value: !Ref 'WebAppCPULowAlarm'
+
+  WebAppASG:
+    Description: 'Group ID of Auto Scaling Group Reference ID'
+    Value: !Ref 'WebAppASG'
+
+  WebAppScaleUp:
+    Description: 'Policy ID of Auto Scaling Up'
+    Value: !Ref 'WebAppScaleUp'
+
+  WebAppScaleDown:
+    Description: 'Policy ID of Auto Scaling Down'
+    Value: !Ref 'WebAppScaleDown'
