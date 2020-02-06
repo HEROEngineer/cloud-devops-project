@@ -25,6 +25,11 @@ Parameters:
     Type: 'AWS::EC2::KeyPair::KeyName'
     Default: udagram
 
+Mappings:
+  WebAppRegion:
+    us-west-2:
+      HVM64: ami-0d1cd67c26f5fca19
+
 ############################### Resources #################################
 Resources:
   BastionIamRole:
@@ -95,7 +100,7 @@ Resources:
         - Ref: BastionSecurityGroup
       SubnetId:
         Fn::ImportValue: !Sub '${EnvironmentName}-PUB1-SN'
-      ImageId: ami-0d1cd67c26f5fca19
+      ImageId: !FindInMap [WebAppRegion, !Ref 'AWS::Region', HVM64]
       InstanceType: t3.small
       KeyName: !Sub ${KeyBastionSSH}
 
@@ -123,39 +128,17 @@ Resources:
     DependsOn:
       - BastionSecurityGroup
       - BastionIamInstanceProfile
-
-############################### Outputs #################################
-Outputs:
-  Website:
-    Description: The Public DNS for the EC2 Instance
-    Value: !Join ["", ["http://", !GetAtt [WebAppLB, DNSName]]]
-
-  WebAppCPUHighAlarm:
-    Description: "CloudWatch to send alarms when EC2 CPU is High"
-    Value: !Ref "WebAppCPUHighAlarm"
-
-  WebAppCPULowAlarm:
-    Description: "CloudWatch to send alarms when EC2 CPU is Low"
-    Value: !Ref "WebAppCPULowAlarm"
-
-  WebAppASG:
-    Description: "Group ID of Auto Scaling Group Reference ID"
-    Value: !Ref "WebAppASG"
-
-  WebAppScaleUp:
-    Description: "Policy ID of Auto Scaling Up"
-    Value: !Ref "WebAppScaleUp"
-
-  WebAppScaleDown:
-    Description: "Policy ID of Auto Scaling Down"
-    Value: !Ref "WebAppScaleDown"
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
           apt-get update -y
           apt-get install unzip awscli -y
           cd /home/ubuntu
           aws s3 cp s3://${S3BucketKeyName}/${KeyBastionSSH}.pem /home/ubuntu
           chmod 400 ${KeyBastionSSH}.pem
       IamInstanceProfile: !Ref BastionIamInstanceProfile
-      ImageId: ami-0d1cd67c26f5fca19
+      ImageId: !FindInMap [WebAppRegion, !Ref 'AWS::Region', HVM64]
       InstanceType: t3.small
       KeyName: !Sub ${KeyBastionSSH}
       SecurityGroupIds:
@@ -167,7 +150,7 @@ Outputs:
     Type: AWS::EC2::EIP
     Properties:
       Domain:
-        Fn::ImportValue: !Sub "${EnvironmentName}-VPCID"
+        Fn::ImportValue: !Sub '${EnvironmentName}-VPCID'
 
   EIPAssociation2:
     Type: AWS::EC2::EIPAssociation
@@ -182,16 +165,18 @@ Outputs:
           - EIP2
           - AllocationId
 
+############################### Outputs #################################
+
 Outputs:
   CIDRBastion1:
     Description: The CIDR of Bastion Host 1
-    Value: !Join ["", [!GetAtt Bastion1.PrivateIp, !Sub "/32"]]
+    Value: !Join ['', [!GetAtt Bastion1.PrivateIp, !Sub '/32']]
     Export:
       Name: !Sub ${EnvironmentName}-BASTION1-CIDR
 
   CIDRBastion2:
     Description: The CIDR to the Bastion Host 2
-    Value: !Join ["", [!GetAtt Bastion2.PrivateIp, !Sub "/32"]]
+    Value: !Join ['', [!GetAtt Bastion2.PrivateIp, !Sub '/32']]
     Export:
       Name: !Sub ${EnvironmentName}-BASTION2-CIDR
 
