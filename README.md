@@ -91,7 +91,7 @@ It is tested for Ubuntu18.
 > Ensure that you have the least [AWS CLI](https://aws.amazon.com/cli/) installed.
 
 ```
-    aws --version
+aws --version
 ```
 
 > Usage:
