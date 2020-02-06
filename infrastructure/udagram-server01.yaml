@@ -13,3 +13,168 @@ Parameters:
     Description: Ip address to allow SSH access to the bastion host
     Type: String
     Default: 85.221.159.72/32
+
+  S3BucketKeyName:
+    Description: S3Bucke where ssh key is hosted
+    Type: String
+    Default: udagram-key-patryk
+
+  ## You have to create a .pem file, and upload it to S3 buckets.
+  KeyBastionSSH:
+    Description: KeyName to access bastion host
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Default: udagram
+
+############################### Resources #################################
+Resources:
+  BastionIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: '/'
+
+  BastionIamPolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: fullAccess
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 's3:*'
+            Resource: '*'
+      Roles:
+        - !Ref BastionIamRole
+
+  BastionIamInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+        - !Ref BastionIamRole
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG to access to bastion host
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VPCID'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Sub ${SourceIP}
+
+  Bastion1:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - BastionSecurityGroup
+      - BastionIamInstanceProfile
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install unzip awscli -y
+          cd /home/ubuntu
+          aws s3 cp s3://${S3BucketKeyName}/${KeyBastionSSH}.pem /home/ubuntu
+          chmod 400 ${KeyBastionSSH}.pem
+      IamInstanceProfile: !Ref BastionIamInstanceProfile
+      SecurityGroupIds:
+        - Ref: BastionSecurityGroup
+      SubnetId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-PUB1-SN'
+      ImageId: ami-0d1cd67c26f5fca19
+      InstanceType: t3.small
+      KeyName: !Sub ${KeyBastionSSH}
+
+  EIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VPCID'
+
+  EIPAssociation1:
+    Type: AWS::EC2::EIPAssociation
+    DependsOn:
+      - Bastion1
+      - EIP1
+    Properties:
+      InstanceId:
+        Ref: Bastion1
+      AllocationId:
+        Fn::GetAtt:
+          - EIP1
+          - AllocationId
+
+  Bastion2:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - BastionSecurityGroup
+      - BastionIamInstanceProfile
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install unzip awscli -y
+          cd /home/ubuntu
+          aws s3 cp s3://${S3BucketKeyName}/${KeyBastionSSH}.pem /home/ubuntu
+          chmod 400 ${KeyBastionSSH}.pem
+      IamInstanceProfile: !Ref BastionIamInstanceProfile
+      ImageId: ami-0d1cd67c26f5fca19
+      InstanceType: t3.small
+      KeyName: !Sub ${KeyBastionSSH}
+      SecurityGroupIds:
+        - Ref: BastionSecurityGroup
+      SubnetId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-PUB2-SN'
+
+  EIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain:
+        Fn::ImportValue: !Sub "${EnvironmentName}-VPCID"
+
+  EIPAssociation2:
+    Type: AWS::EC2::EIPAssociation
+    DependsOn:
+      - Bastion2
+      - EIP2
+    Properties:
+      InstanceId:
+        Ref: Bastion2
+      AllocationId:
+        Fn::GetAtt:
+          - EIP2
+          - AllocationId
+
+Outputs:
+  CIDRBastion1:
+    Description: The CIDR of Bastion Host 1
+    Value: !Join ["", [!GetAtt Bastion1.PrivateIp, !Sub "/32"]]
+    Export:
+      Name: !Sub ${EnvironmentName}-BASTION1-CIDR
+
+  CIDRBastion1:
+    Description: The CIDR to the Bastion Host 1
+    Value: !Join ["", [!GetAtt Bastion2.PrivateIp, !Sub "/32"]]
+    Export:
+      Name: !Sub ${EnvironmentName}-BASTION2-CIDR
+
+  KeyBastionSSH:
+    Description: SSH Key Name
+    Value: !Sub ${KeyBastionSSH}
+    Export:
+      Name: !Sub ${EnvironmentName}-BASTION-KEYNAME

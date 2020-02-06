@@ -13,7 +13,7 @@ Parameters:
   S3BucketAppName:
     Description: A Bucked name.
     Type: String
-    Default: udacity-udagram
+    Default: udagram-app
 
   S3BucketKeyName:
     Description: A Bucked name.
@@ -125,7 +125,7 @@ Outputs:
     Value: !Join ['', ['https://', !GetAtt [S3KeyPar, DomainName]]]
     Description: Secure URL for key hosted on S3
   S3Logs:
-    Value: !GetAtt [S3Logs, DomainName]
+    Value: !GetAtt [S3Logs, WebsiteURL]
     Description: URL for logs hosted on S3
     Export:
       Name: !Sub ${EnvironmentName}-S3-LOGS
