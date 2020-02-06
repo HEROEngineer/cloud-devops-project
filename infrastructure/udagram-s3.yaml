@@ -1,0 +1,134 @@
+Description: >
+  Patryk Pawlak | Udacity 2020
+  AWS-CloudFormation script to create a S3 bucket for deploying a high-availability 
+  web-app.
+
+############################### Parameters ################################
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names.
+    Type: String
+    Default: UdagramApp
+
+  S3BucketAppName:
+    Description: A Bucked name.
+    Type: String
+    Default: udacity-udagram
+
+  S3BucketKeyName:
+    Description: A Bucked name.
+    Type: String
+    Default: udagram-key
+
+  S3BucketLogsName:
+    Description: A Bucked name.
+    Type: String
+    Default: udagram-logs
+
+############################### Resources #################################
+Resources:
+  ## App Bucket
+  S3WebApp:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketAppName
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+    DeletionPolicy: Delete
+
+  S3WebAppPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3WebApp
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action: s3:*
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3WebApp', '/*']]
+            Principal:
+              AWS: '*'
+
+  ## KeyPar Bucket
+  S3KeyPar:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketKeyName
+      AccessControl: Private
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+    DeletionPolicy: Retain
+
+  S3KeyParPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3KeyPar
+      PolicyDocument:
+        Statement:
+          - Sid: AllowStaticObjectDownload
+            Action: s3:GetObject
+            Effect: Allow
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3KeyPar', '/*']]
+            Principal:
+              AWS: '*'
+          - Sid: PutObjectAccess
+            Action: s3:PutObject
+            Effect: Allow
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3KeyPar', '/*']]
+            Principal:
+              AWS: '*'
+
+  ## Logs Bucket
+  S3Logs:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      BucketName: !Ref S3BucketLogsName
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+    DeletionPolicy: Retain
+
+  S3LogsPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Logs
+      PolicyDocument:
+        Statement:
+          - Sid: AllowStaticObjectDownload
+            Action: s3:GetObject
+            Effect: Allow
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3Logs', '/*']]
+            Principal:
+              AWS: '*'
+          - Sid: PutObjectAccess
+            Action: s3:PutObject
+            Effect: Allow
+            Resource: !Join ['', ['arn:aws:s3:::', !Ref 'S3Logs', '/*']]
+            Principal:
+              AWS: '*'
+
+############################### Outputs #################################
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt [S3WebApp, WebsiteURL]
+    Description: URL for website hosted on S3
+  WebsiteSecureURL:
+    Value: !Join ['', ['https://', !GetAtt [S3WebApp, DomainName]]]
+    Description: Secure URL for website hosted on S3
+  S3KeyParT:
+    Value: !GetAtt [S3KeyPar, WebsiteURL]
+    Description: URL for key hosted on S3
+  S3KeyParTSecureURL:
+    Value: !Join ['', ['https://', !GetAtt [S3KeyPar, DomainName]]]
+    Description: Secure URL for key hosted on S3
+  S3Logs:
+    Value: !GetAtt [S3Logs, DomainName]
+    Description: URL for logs hosted on S3
+    Export:
+      Name: !Sub ${EnvironmentName}-S3-LOGS
+  S3LogsURL:
+    Value: !Join ['', ['https://', !GetAtt [S3Logs, DomainName]]]
+    Description: Secure URL for logs hosted on S3

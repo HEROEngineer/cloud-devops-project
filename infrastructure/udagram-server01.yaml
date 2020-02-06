@@ -1,0 +1,15 @@
+Description: >
+  Patryk Pawlak | Udacity 2020
+  AWS-CloudFormation script to create a Bastion access.
+
+############################### Parameters ################################
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    Default: UdagramApp
+
+  SourceIP:
+    Description: Ip address to allow SSH access to the bastion host
+    Type: String
+    Default: 85.221.159.72/32
